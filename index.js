@@ -70,7 +70,6 @@ function HttpSwitchAccessory(log, config) {
             that.httpRequest(url, "", "GET", function(error, response, body) {
                 if (error) {
                     that.log('HTTP get status function failed: %s', error.message);
-                    callback(error);
                 }
                 else {
                     done(null, body);
