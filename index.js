@@ -86,7 +86,6 @@ function HttpSwitchAccessory(log, config) {
                 var binaryState = parseInt(data);
                 that.state = binaryState > 0;
             }
-            that.log("status received from: " + that.statusUrl, "state is currently: ", that.state.toString());
 
             that.services.Switch
                 .getCharacteristic(Characteristic.On)
@@ -143,7 +142,6 @@ HttpSwitchAccessory.prototype.getStatusState = function (callback) {
                 var binaryState = parseInt(responseBody);
                 powerOn = binaryState > 0;
             }
-            this.log("status received from: " + url, "state is currently: ", powerOn.toString());
             callback(null, powerOn);
         }
     }.bind(this));
@@ -164,11 +162,9 @@ HttpSwitchAccessory.prototype.setPowerState = function (powerOn, callback) {
     if (powerOn) {
         url = this.onUrl;
         body = this.onBody;
-        this.log("Setting power state to on");
     } else {
         url = this.offUrl;
         body = this.offBody;
-        this.log("Setting power state to off");
     }
 
     this.httpRequest(url, body, this.httpMethod, function (error, response, responseBody) {
@@ -177,7 +173,6 @@ HttpSwitchAccessory.prototype.setPowerState = function (powerOn, callback) {
             callback(error);
         }
         else {
-            this.log('HTTP set power function succeeded!');
             callback();
         }
     }.bind(this));
