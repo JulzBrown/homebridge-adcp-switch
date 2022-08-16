@@ -1,7 +1,7 @@
 {
-  "name": "homebridge-http-switch",
+  "name": "homebridge-adcp-switch",
   "version": "1.0.0",
-  "description": "A switch plugin for homebridge (https://github.com/nfarina/homebridge) which integrates with HTTP(S) APIs.",
+  "description": "A switch plugin for homebridge (https://github.com/nfarina/homebridge) which integrates with ADCP.",
   "license": "ISC",
   "keywords": [
     "homebridge-plugin"
@@ -11,19 +11,17 @@
     "homebridge": ">=0.4.0"
   },
   "author": {
-    "name": "NovaGL"
+    "name": "JulzBrown"
   },
   "contributors":[
-    { "name" : "Adrian Rudman"},
-    { "name" : "David Parry"},
-    { "name" : "vectronic"}
+    { "name" : "Julian Brown"}
   ],
   "repository": {
     "type": "git",
-    "url": "git://github.com/vectronic/homebridge-http-switch"
+    "url": "git://github.com/JulzBrown/homebridge-adcp-switch"
   },
   "dependencies": {
-    "request": "^2.83.0",
+    "telnet-client": "^0.13.1",
     "polling-to-event": ">=2.1.0"
   }
 }

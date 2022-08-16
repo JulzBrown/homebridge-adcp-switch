@@ -1,7 +1,7 @@
 "use strict";
 
 var Service, Characteristic;
-var request = require("request");
+var telnetClient = require("telnet-client");
 var pollingtoevent = require('polling-to-event');
 
 
@@ -10,23 +10,24 @@ module.exports = function(homebridge) {
     Service = homebridge.hap.Service;
     Characteristic = homebridge.hap.Characteristic;
 
-    homebridge.registerAccessory("homebridge-http-switch", "http-switch", HttpSwitchAccessory);
+    homebridge.registerAccessory("homebridge-adcp-switch", "adcp-switch", ADCPSwitchAccessory);
 };
 
 
-function HttpSwitchAccessory(log, config) {
+function ADCPSwitchAccessory(log, config) {
     this.log = log;
 
-    this.name                   = config["name"]                    || "HTTP Switch";
+    this.name                   = config["name"]                    || "ADCP Switch";
     this.checkStatus 	        = config["checkStatus"] 		 	|| "no";
     this.pollingMillis          = config["pollingMillis"]           || 10000;
-    this.onUrl                  = config["onUrl"];
-    this.onBody                 = config["onBody"];
-    this.offUrl                 = config["offUrl"];
-    this.offBody                = config["offBody"];
-    this.statusUrl              = config["statusUrl"];
+    this.onCmd                  = config["onCmd"]                   || "power \"on\"";
+    this.offCmd                 = config["offCmd"]                  || "power \"off\"";
+    this.statusCmd              = config["statusCmd"]		        || "power_status ?";
     this.statusRegex            = config["statusRegex"]		        || "";
-    this.httpMethod             = config["httpMethod"] 	  	 	    || "GET";
+    this.host                   = config["host"];
+    this.port                   = config["port"];
+    this.shellPrompt            = config["shellPrompt"];
+    this.timeout                = config["timeout"];
 
     this.state = false;
 
@@ -38,9 +39,9 @@ function HttpSwitchAccessory(log, config) {
     };
 
     this.services.AccessoryInformation
-        .setCharacteristic(Characteristic.Manufacturer, "vectronic");
+        .setCharacteristic(Characteristic.Manufacturer, "sony");
     this.services.AccessoryInformation
-        .setCharacteristic(Characteristic.Model, "HTTP Switch");
+        .setCharacteristic(Characteristic.Model, "ADCP Switch");
 
     switch (this.checkStatus) {
         case "yes":
@@ -63,16 +64,15 @@ function HttpSwitchAccessory(log, config) {
     }
 
     // Status Polling
-    if (this.statusUrl && this.checkStatus === "polling") {
+    if (this.checkStatus === "polling") {
 
-        var url = this.statusUrl;
         var statusemitter = pollingtoevent(function(done) {
-            that.httpRequest(url, "", "GET", function(error, response, body) {
+            that.telnetRequest(that.host, that.port, that.shellPrompt, that.timeout, that.statusCmd, function(error, response) {
                 if (error) {
-                    that.log('HTTP get status function failed: %s', error.message);
+                    that.log('Telnet Request function failed: %s', error.message);
                 }
                 else {
-                    done(null, body);
+                    done(null, response);
                 }
             })
         }, {longpolling:true, interval:that.pollingMillis, longpollEventName:"statuspoll"});
@@ -95,51 +95,43 @@ function HttpSwitchAccessory(log, config) {
 }
 
 
-HttpSwitchAccessory.prototype.httpRequest = function (url, body, method, callback) {
+ADCPSwitchAccessory.prototype.telnetRequest = function (host, port, shellPrompt, timeout, cmd, callback) {
 
     var callbackMethod = callback;
 
-    request({
-            url: url,
-            body: body,
-            method: method,
-            rejectUnauthorized: false
-        },
-        function (error, response, responseBody) {
-            if (callbackMethod) {
-                callbackMethod(error, response, responseBody)
-            }
-            else {
-                this.log.warn("callbackMethod not defined!");
-            }
-        })
+    var connection = new telnetClient();
+        connection.on('ready', function(prompt){
+            connection.exec(cmd, function(error, response){
+                connection.end().then(function(){
+                    callbackMethod(error,response);
+                });
+            });
+        });
+        connection.on('timeout', function(){
+            callbackMethod(error,'timeout');
+        });
+
+        connection.connect({ host: host, port: port, shellPrompt: shellPrompt, timeout: timeout});
 };
 
 
-HttpSwitchAccessory.prototype.getStatusState = function (callback) {
+ADCPSwitchAccessory.prototype.getStatusState = function (callback) {
 
-    if (!this.statusUrl) {
-        this.log.warn("Ignoring request: No status url defined.");
-        callback(new Error("No status url defined."));
-        return;
-    }
-
-    var url = this.statusUrl;
     var regex = this.statusRegex;
 
-    this.httpRequest(url, "", "GET", function (error, response, responseBody) {
+    this.telnetRequest(this.host, this.port, this.shellPrompt, this.timeout, this.statusCmd, function(error, response) {
         if (error) {
-            this.log('HTTP get status function failed: %s', error.message);
+            this.log('Telnet get status function failed: %s', error.message);
             callback(error);
         }
         else {
             var powerOn = false;
             if (Boolean(regex)) {
                 var re = new RegExp(regex);
-                powerOn = re.test(responseBody);
+                powerOn = re.test(response);
             }
             else {
-                var binaryState = parseInt(responseBody);
+                var binaryState = parseInt(response);
                 powerOn = binaryState > 0;
             }
             callback(null, powerOn);
@@ -148,28 +140,20 @@ HttpSwitchAccessory.prototype.getStatusState = function (callback) {
 };
 
 
-HttpSwitchAccessory.prototype.setPowerState = function (powerOn, callback) {
+ADCPSwitchAccessory.prototype.setPowerState = function (powerOn, callback) {
 
     var url;
     var body;
 
-    if (!this.onUrl || !this.offUrl) {
-        this.log.warn("Ignoring request: No power url defined.");
-        callback(new Error("No power url defined."));
-        return;
-    }
-
     if (powerOn) {
-        url = this.onUrl;
-        body = this.onBody;
+        cmd = this.onCmd;
     } else {
-        url = this.offUrl;
-        body = this.offBody;
+        cmd = this.offCmd;
     }
 
-    this.httpRequest(url, body, this.httpMethod, function (error, response, responseBody) {
-        if (error) {
-            this.log('HTTP set power function failed: %s', error.message);
+    this.telnetRequest(this.host, this.port, this.shellPrompt, this.timeout, this.statusCmd, function(error, response) {
+        if (error || response !== 'ok') {
+            this.log('Telnet set power function failed: ' + response + ' %s', error.message);
             callback(error);
         }
         else {
@@ -179,6 +163,6 @@ HttpSwitchAccessory.prototype.setPowerState = function (powerOn, callback) {
 };
 
 
-HttpSwitchAccessory.prototype.getServices = function () {
+ADCPSwitchAccessory.prototype.getServices = function () {
     return [this.services.AccessoryInformation, this.services.Switch];
 };
